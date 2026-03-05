@@ -392,3 +392,63 @@ fn to_hex(s: &mut [u8], s_idx: &mut usize, b: u8) {
     s[*s_idx + 1] = HEX_LOOKUP[i + 1];
     *s_idx += 2;
 }
+
+#[cfg(feature = "serde")]
+impl<const TLSH_CHECKSUM_LEN: usize, const TLSH_STRING_LEN_REQ: usize, const CODE_SIZE: usize>
+    serde::Serialize for Tlsh<TLSH_CHECKSUM_LEN, TLSH_STRING_LEN_REQ, CODE_SIZE>
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let hash = self.hash();
+        let s = core::str::from_utf8(&hash).map_err(serde::ser::Error::custom)?;
+        serializer.serialize_str(s)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<
+        'de,
+        const TLSH_CHECKSUM_LEN: usize,
+        const TLSH_STRING_LEN_REQ: usize,
+        const CODE_SIZE: usize,
+    > serde::Deserialize<'de> for Tlsh<TLSH_CHECKSUM_LEN, TLSH_STRING_LEN_REQ, CODE_SIZE>
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct TlshVisitor<
+            const TLSH_CHECKSUM_LEN: usize,
+            const TLSH_STRING_LEN_REQ: usize,
+            const CODE_SIZE: usize,
+        >;
+        impl<
+                'de,
+                const TLSH_CHECKSUM_LEN: usize,
+                const TLSH_STRING_LEN_REQ: usize,
+                const CODE_SIZE: usize,
+            > serde::de::Visitor<'de>
+            for TlshVisitor<TLSH_CHECKSUM_LEN, TLSH_STRING_LEN_REQ, CODE_SIZE>
+        {
+            type Value = Tlsh<TLSH_CHECKSUM_LEN, TLSH_STRING_LEN_REQ, CODE_SIZE>;
+
+            fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
+                formatter.write_str("a valid TLSH hex string")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                value
+                    .parse()
+                    .map_err(|_| serde::de::Error::custom("invalid TLSH string"))
+            }
+        }
+
+        deserializer
+            .deserialize_str(TlshVisitor::<TLSH_CHECKSUM_LEN, TLSH_STRING_LEN_REQ, CODE_SIZE>)
+    }
+}
